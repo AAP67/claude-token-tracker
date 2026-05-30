@@ -1,0 +1,1 @@
+console.log("[Battery Saver] Content script loaded");
