@@ -291,8 +291,16 @@ function updateWidget() {
     if (el("bs-msgs-remaining")) {
       if (tracker.displayEstimate) {
         el("bs-msgs-remaining").textContent = "~" + tracker.displayEstimate + " messages remaining";
+      } else if (pct5h >= 90) {
+        el("bs-msgs-remaining").textContent = "Almost at limit";
+      } else if (pct5h >= 75) {
+        el("bs-msgs-remaining").textContent = "Running low";
+      } else if (pct5h >= 50) {
+        el("bs-msgs-remaining").textContent = "Getting low";
+      } else if (pct5h >= 25) {
+        el("bs-msgs-remaining").textContent = "About half remaining";
       } else {
-        el("bs-msgs-remaining").textContent = "Calibrating...";
+        el("bs-msgs-remaining").textContent = "Plenty of juice left";
       }
     }
 
