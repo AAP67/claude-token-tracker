@@ -240,7 +240,8 @@ function updateWidget() {
 
       if (icon) {
         const maxHeight = 14;
-        const fillHeight = Math.max(1, (pct5h / 100) * maxHeight);
+        const remaining = 100 - pct5h;
+        const fillHeight = Math.max(1, (remaining / 100) * maxHeight);
         const yPos = 18 - fillHeight;
         icon.setAttribute("y", yPos);
         icon.setAttribute("height", fillHeight);
