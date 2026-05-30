@@ -71,9 +71,11 @@ function handleRateLimit(data) {
     if (delta < 0) {
       tracker.totalDelta = 0;
       tracker.messagesSent = 0;
-    } else if (delta > 0) {
-      tracker.totalDelta += delta;
+    } else {
       tracker.messagesSent += 1;
+      if (delta > 0) {
+        tracker.totalDelta += delta;
+      }
     }
 
     const rateLimit = {
