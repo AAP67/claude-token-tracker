@@ -67,9 +67,11 @@ function handleRateLimit(data) {
     const prevUtil = result.rateLimit?.utilization5h || 0;
     const tracker = result.usageTracker || { totalDelta: 0, messagesSent: 0 };
 
-    // Calculate utilization cost of this message
     const delta = currentUtil - prevUtil;
-    if (delta > 0) {
+    if (delta < 0) {
+      tracker.totalDelta = 0;
+      tracker.messagesSent = 0;
+    } else if (delta > 0) {
       tracker.totalDelta += delta;
       tracker.messagesSent += 1;
     }
@@ -261,12 +263,14 @@ function updateWidget() {
 
     // Estimated messages remaining
     if (el("bs-msgs-remaining")) {
-      if (tracker.messagesSent > 0 && tracker.totalDelta > 0) {
+      const minMessages = 5;
+      if (tracker.messagesSent >= minMessages && tracker.totalDelta > 0) {
         const costPerMsg = tracker.totalDelta / tracker.messagesSent;
         const remaining = Math.floor((1 - (rl.utilization5h || 0)) / costPerMsg);
         el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
       } else {
-        el("bs-msgs-remaining").textContent = "Send a message to estimate remaining";
+        const tracked = tracker.messagesSent || 0;
+        el("bs-msgs-remaining").textContent = "Calibrating... (" + tracked + "/" + minMessages + " messages)";
       }
     }
 
@@ -298,7 +302,6 @@ function getConvoIdFromUrl() {
 function init() {
   createWidget();
 
-  // Process any queued messages that arrived before content.js loaded
   if (window.__batterySaverQueue && window.__batterySaverQueue.length > 0) {
     console.log("[Battery Saver] Processing", window.__batterySaverQueue.length, "queued messages");
     window.__batterySaverQueue.forEach(msg => processMessage(msg));
