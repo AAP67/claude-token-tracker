@@ -227,15 +227,58 @@ function updateWidget() {
 
 // ── Init ──
 
-createWidget();
-updateWidget();
+function getConvoIdFromUrl() {
+  const match = window.location.pathname.match(/\/chat\/([a-f0-9-]+)/);
+  return match ? match[1] : null;
+}
 
-// Refresh countdown every minute
-setInterval(updateWidget, 60000);
+function init() {
+  createWidget();
 
-// Sync across tabs
-chrome.storage.onChanged.addListener(() => {
-  updateWidget();
-});
+  // Load existing session or match to current URL
+  const urlConvoId = getConvoIdFromUrl();
+
+  chrome.storage.local.get(["session", "rateLimit"], (result) => {
+    const session = result.session;
+
+    if (session && urlConvoId && session.convoId !== urlConvoId) {
+      archiveSession(session);
+      const fresh = newSession(urlConvoId);
+      chrome.storage.local.set({ session: fresh }, () => updateWidget());
+    } else {
+      updateWidget();
+    }
+  });
+
+  // Refresh countdown every minute
+  setInterval(updateWidget, 60000);
+
+  // Sync across tabs
+  chrome.storage.onChanged.addListener(() => {
+    updateWidget();
+  });
+
+  // Detect conversation switches (SPA navigation)
+  let lastUrl = location.href;
+  const observer = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      const newConvoId = getConvoIdFromUrl();
+      if (newConvoId) {
+        chrome.storage.local.get(["session"], (result) => {
+          const session = result.session;
+          if (session && session.convoId !== newConvoId) {
+            archiveSession(session);
+            const fresh = newSession(newConvoId);
+            chrome.storage.local.set({ session: fresh }, () => updateWidget());
+          }
+        });
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+init();
 
 console.log("[Battery Saver] Content script loaded");
