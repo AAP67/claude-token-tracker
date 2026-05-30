@@ -272,8 +272,7 @@ function updateWidget() {
         const remaining = Math.floor((1 - (rl.utilization5h || 0)) / costPerMsg);
         el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
       } else {
-        const tracked = tracker.messagesSent || 0;
-        el("bs-msgs-remaining").textContent = "Calibrating... (" + tracked + "/" + minMessages + " messages)";
+        el("bs-msgs-remaining").textContent = "Calibrating...";
       }
     }
 
