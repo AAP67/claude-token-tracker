@@ -5,28 +5,40 @@
     const [url, options] = args;
 
     if (typeof url === "string" && url.includes("/completion")) {
+      // Extract conversation ID from URL
+      const convoMatch = url.match(/chat_conversations\/([a-f0-9-]+)/);
+      const convoId = convoMatch ? convoMatch[1] : "unknown";
+
       // Capture the prompt
+      let prompt = "";
       try {
         const body = JSON.parse(options.body);
-        console.log("[Battery Saver] Prompt:", body.prompt);
+        prompt = body.prompt || "";
       } catch (e) {}
+
+      // Send prompt data to content script
+      window.postMessage({
+        type: "BATTERY_SAVER",
+        event: "prompt",
+        data: {
+          convoId: convoId,
+          text: prompt,
+          charCount: prompt.length,
+          timestamp: Date.now()
+        }
+      }, "*");
 
       // Call original fetch
       const response = await originalFetch.apply(this, args);
-
-      // Clone the response so we can read the stream without breaking Claude
       const clone = response.clone();
-
-      // Read the stream in the background
-      readStream(clone);
-
+      readStream(clone, convoId);
       return response;
     }
 
     return originalFetch.apply(this, args);
   };
 
-  async function readStream(response) {
+  async function readStream(response, convoId) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
@@ -56,12 +68,26 @@
           }
 
           if (data.type === "message_limit") {
-            console.log("[Battery Saver] Rate limit data:", data.message_limit);
+            window.postMessage({
+              type: "BATTERY_SAVER",
+              event: "rate_limit",
+              data: data.message_limit
+            }, "*");
           }
 
           if (data.type === "message_stop") {
-            console.log("[Battery Saver] Response:", responseText);
-            console.log("[Battery Saver] Thinking:", thinkingText);
+            window.postMessage({
+              type: "BATTERY_SAVER",
+              event: "response",
+              data: {
+                convoId: convoId,
+                responseText: responseText,
+                responseChars: responseText.length,
+                thinkingText: thinkingText,
+                thinkingChars: thinkingText.length,
+                timestamp: Date.now()
+              }
+            }, "*");
           }
         } catch (e) {}
       }

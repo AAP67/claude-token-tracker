@@ -17,3 +17,23 @@
     }
   ]
 }
+{
+  "manifest_version": 3,
+  "name": "Battery Saver",
+  "version": "0.1.0",
+  "description": "Battery for your AI",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
