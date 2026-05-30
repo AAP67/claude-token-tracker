@@ -61,16 +61,30 @@ function handleResponse(data) {
 }
 
 function handleRateLimit(data) {
-  const rateLimit = {
-    status: data.type,
-    utilization5h: data.windows?.["5h"]?.utilization || 0,
-    utilization7d: data.windows?.["7d"]?.utilization || 0,
-    resetsAt5h: data.windows?.["5h"]?.resets_at || null,
-    resetsAt7d: data.windows?.["7d"]?.resets_at || null,
-    updatedAt: Date.now()
-  };
+  const currentUtil = data.windows?.["5h"]?.utilization || 0;
 
-  chrome.storage.local.set({ rateLimit }, () => updateWidget());
+  chrome.storage.local.get(["rateLimit", "usageTracker"], (result) => {
+    const prevUtil = result.rateLimit?.utilization5h || 0;
+    const tracker = result.usageTracker || { totalDelta: 0, messagesSent: 0 };
+
+    // Calculate utilization cost of this message
+    const delta = currentUtil - prevUtil;
+    if (delta > 0) {
+      tracker.totalDelta += delta;
+      tracker.messagesSent += 1;
+    }
+
+    const rateLimit = {
+      status: data.type,
+      utilization5h: currentUtil,
+      utilization7d: data.windows?.["7d"]?.utilization || 0,
+      resetsAt5h: data.windows?.["5h"]?.resets_at || null,
+      resetsAt7d: data.windows?.["7d"]?.resets_at || null,
+      updatedAt: Date.now()
+    };
+
+    chrome.storage.local.set({ rateLimit, usageTracker: tracker }, () => updateWidget());
+  });
 }
 
 function handleHistoryLoad(data) {
@@ -126,7 +140,7 @@ function createWidget() {
     <div id="bs-toggle" class="green" title="Battery Saver">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="6" y="4" width="12" height="18" rx="2" stroke="#22c55e"/>
-        <rect id="bs-icon-fill" x="8" y="14" width="8" height="6" rx="1" fill="#22c55e"/>
+        <rect id="bs-icon-fill" x="8" y="18" width="8" height="1" rx="1" fill="#22c55e"/>
         <line x1="10" y1="2" x2="14" y2="2" stroke="#22c55e" stroke-width="2" stroke-linecap="round"/>
       </svg>
     </div>
@@ -141,6 +155,7 @@ function createWidget() {
         <div class="bs-value"><span id="bs-5h-pct">0</span><span class="unit">% used</span></div>
         <div class="bs-bar-bg"><div class="bs-bar-fill green" id="bs-5h-bar" style="width:0%"></div></div>
         <div class="bs-sub" id="bs-5h-reset"></div>
+        <div class="bs-sub" id="bs-msgs-remaining"></div>
       </div>
 
       <div class="bs-section">
@@ -205,25 +220,38 @@ function formatResetTime(timestamp) {
 }
 
 function updateWidget() {
-  chrome.storage.local.get(["session", "rateLimit"], (result) => {
+  chrome.storage.local.get(["session", "rateLimit", "usageTracker"], (result) => {
     const session = result.session || {};
     const rl = result.rateLimit || {};
+    const tracker = result.usageTracker || {};
 
     const pct5h = Math.round((rl.utilization5h || 0) * 100);
     const pct7d = Math.round((rl.utilization7d || 0) * 100);
     const color5h = getColor(pct5h);
 
+    // Update toggle button and battery icon
     const toggle = document.getElementById("bs-toggle");
     if (toggle) {
       toggle.className = color5h;
       const icon = document.getElementById("bs-icon-fill");
-      const iconStroke = toggle.querySelectorAll("rect, line");
       const colorHex = color5h === "red" ? "#ef4444" : color5h === "yellow" ? "#f59e0b" : "#22c55e";
-      if (icon) icon.setAttribute("fill", colorHex);
+
+      if (icon) {
+        const maxHeight = 14;
+        const fillHeight = Math.max(1, (pct5h / 100) * maxHeight);
+        const yPos = 18 - fillHeight;
+        icon.setAttribute("y", yPos);
+        icon.setAttribute("height", fillHeight);
+        icon.setAttribute("fill", colorHex);
+      }
+
+      const iconStroke = toggle.querySelectorAll("rect, line");
       iconStroke.forEach(el => el.setAttribute("stroke", colorHex));
     }
 
     const el = (id) => document.getElementById(id);
+
+    // 5-hour section
     if (el("bs-5h-pct")) el("bs-5h-pct").textContent = pct5h;
     if (el("bs-5h-bar")) {
       el("bs-5h-bar").style.width = pct5h + "%";
@@ -231,6 +259,18 @@ function updateWidget() {
     }
     if (el("bs-5h-reset")) el("bs-5h-reset").textContent = formatResetTime(rl.resetsAt5h);
 
+    // Estimated messages remaining
+    if (el("bs-msgs-remaining")) {
+      if (tracker.messagesSent > 0 && tracker.totalDelta > 0) {
+        const costPerMsg = tracker.totalDelta / tracker.messagesSent;
+        const remaining = Math.floor((1 - (rl.utilization5h || 0)) / costPerMsg);
+        el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
+      } else {
+        el("bs-msgs-remaining").textContent = "Send a message to estimate remaining";
+      }
+    }
+
+    // 7-day section
     const color7d = getColor(pct7d);
     if (el("bs-7d-pct")) el("bs-7d-pct").textContent = pct7d;
     if (el("bs-7d-bar")) {
@@ -239,6 +279,7 @@ function updateWidget() {
     }
     if (el("bs-7d-reset")) el("bs-7d-reset").textContent = formatResetTime(rl.resetsAt7d);
 
+    // Session stats
     if (el("bs-msgs")) el("bs-msgs").textContent = session.messageCount || 0;
     if (el("bs-prompt-tok")) el("bs-prompt-tok").textContent = session.promptTokens || 0;
     if (el("bs-resp-tok")) el("bs-resp-tok").textContent = session.responseTokens || 0;
@@ -264,18 +305,14 @@ function init() {
     window.__batterySaverQueue = [];
   }
 
-  // Load existing data from storage
   updateWidget();
 
-  // Refresh countdown every minute
   setInterval(updateWidget, 60000);
 
-  // Sync across tabs
   chrome.storage.onChanged.addListener(() => {
     updateWidget();
   });
 
-  // Detect conversation switches (SPA navigation)
   let lastUrl = location.href;
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
