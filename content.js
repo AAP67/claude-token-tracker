@@ -8,6 +8,7 @@ window.addEventListener("message", (event) => {
   if (eventType === "prompt") handlePrompt(data);
   if (eventType === "response") handleResponse(data);
   if (eventType === "rate_limit") handleRateLimit(data);
+  if (eventType === "history_load") handleHistoryLoad(data);
 });
 
 // ── Token estimation ──
@@ -65,6 +66,26 @@ function handleRateLimit(data) {
   };
 
   chrome.storage.local.set({ rateLimit }, () => updateWidget());
+}
+
+function handleHistoryLoad(data) {
+  const promptTokens = estimateTokens(data.promptChars);
+  const responseTokens = estimateTokens(data.responseChars);
+  const thinkingTokens = estimateTokens(data.thinkingChars);
+
+  const session = {
+    convoId: data.convoId,
+    messageCount: data.messageCount,
+    promptTokens: promptTokens,
+    responseTokens: responseTokens,
+    thinkingTokens: thinkingTokens,
+    totalTokens: promptTokens + responseTokens + thinkingTokens,
+    startedAt: data.timestamp,
+    lastActivity: data.timestamp
+  };
+
+  chrome.storage.local.set({ session }, () => updateWidget());
+  console.log("[Battery Saver] Loaded history:", session.totalTokens, "tokens from", data.messageCount, "messages");
 }
 
 function newSession(convoId) {
