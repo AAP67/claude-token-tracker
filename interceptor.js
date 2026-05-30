@@ -4,6 +4,9 @@
   window.fetch = async function (...args) {
     const [url, options] = args;
     const method = options?.method?.toUpperCase() || "GET";
+    if (typeof url === "string" && url.includes("chat_conversations")) {
+  console.log("[Battery Saver] Fetch URL:", url, "Method:", method);
+}
 
     // ── Intercept completion POST requests ──
     if (typeof url === "string" && url.includes("/completion") && method === "POST") {
