@@ -4,9 +4,10 @@
   window.fetch = async function (...args) {
     const [url, options] = args;
     const method = options?.method?.toUpperCase() || "GET";
+
     if (typeof url === "string" && url.includes("chat_conversations")) {
-  console.log("[Battery Saver] Fetch URL:", url, "Method:", method);
-}
+      console.log("[Battery Saver] Fetch URL:", url, "Method:", method);
+    }
 
     // ── Intercept completion POST requests ──
     if (typeof url === "string" && url.includes("/completion") && method === "POST") {
@@ -37,7 +38,7 @@
     }
 
     // ── Intercept conversation load GET requests ──
-    if (typeof url === "string" && url.match(/chat_conversations\/[a-f0-9-]+$/) && method === "GET") {
+    if (typeof url === "string" && url.match(/chat_conversations\/[a-f0-9-]+\?/) && !url.includes("/completion") && method === "GET") {
       const response = await originalFetch.apply(this, args);
       const clone = response.clone();
 
