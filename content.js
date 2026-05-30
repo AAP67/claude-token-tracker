@@ -233,4 +233,9 @@ updateWidget();
 // Refresh countdown every minute
 setInterval(updateWidget, 60000);
 
+// Sync across tabs
+chrome.storage.onChanged.addListener(() => {
+  updateWidget();
+});
+
 console.log("[Battery Saver] Content script loaded");
