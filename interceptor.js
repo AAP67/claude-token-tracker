@@ -3,20 +3,19 @@
 
   window.fetch = async function (...args) {
     const [url, options] = args;
+    const method = options?.method?.toUpperCase() || "GET";
 
-    if (typeof url === "string" && url.includes("/completion")) {
-      // Extract conversation ID from URL
+    // ── Intercept completion POST requests ──
+    if (typeof url === "string" && url.includes("/completion") && method === "POST") {
       const convoMatch = url.match(/chat_conversations\/([a-f0-9-]+)/);
       const convoId = convoMatch ? convoMatch[1] : "unknown";
 
-      // Capture the prompt
       let prompt = "";
       try {
         const body = JSON.parse(options.body);
         prompt = body.prompt || "";
       } catch (e) {}
 
-      // Send prompt data to content script
       window.postMessage({
         type: "BATTERY_SAVER",
         event: "prompt",
@@ -28,10 +27,55 @@
         }
       }, "*");
 
-      // Call original fetch
       const response = await originalFetch.apply(this, args);
       const clone = response.clone();
       readStream(clone, convoId);
+      return response;
+    }
+
+    // ── Intercept conversation load GET requests ──
+    if (typeof url === "string" && url.match(/chat_conversations\/[a-f0-9-]+$/) && method === "GET") {
+      const response = await originalFetch.apply(this, args);
+      const clone = response.clone();
+
+      clone.json().then(data => {
+        if (data.chat_messages) {
+          const convoId = data.uuid;
+          let promptChars = 0;
+          let responseChars = 0;
+          let thinkingChars = 0;
+          let messageCount = 0;
+
+          data.chat_messages.forEach(msg => {
+            if (msg.sender === "human") {
+              messageCount += 1;
+              msg.content.forEach(block => {
+                if (block.type === "text") promptChars += (block.text || "").length;
+              });
+            }
+            if (msg.sender === "assistant") {
+              msg.content.forEach(block => {
+                if (block.type === "text") responseChars += (block.text || "").length;
+                if (block.type === "thinking") thinkingChars += (block.thinking || "").length;
+              });
+            }
+          });
+
+          window.postMessage({
+            type: "BATTERY_SAVER",
+            event: "history_load",
+            data: {
+              convoId: convoId,
+              messageCount: messageCount,
+              promptChars: promptChars,
+              responseChars: responseChars,
+              thinkingChars: thinkingChars,
+              timestamp: Date.now()
+            }
+          }, "*");
+        }
+      }).catch(() => {});
+
       return response;
     }
 
