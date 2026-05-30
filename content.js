@@ -71,6 +71,8 @@ function handleRateLimit(data) {
     if (delta < 0) {
       tracker.totalDelta = 0;
       tracker.messagesSent = 0;
+      tracker.lastEstimate = 0;
+      tracker.stableCount = 0;
     } else {
       tracker.messagesSent += 1;
       if (delta > 0) {
@@ -270,7 +272,27 @@ function updateWidget() {
       if (tracker.messagesSent >= minMessages && tracker.totalDelta > 0) {
         const costPerMsg = tracker.totalDelta / tracker.messagesSent;
         const remaining = Math.floor((1 - (rl.utilization5h || 0)) / costPerMsg);
-        el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
+
+        const lastEstimate = tracker.lastEstimate || 0;
+        const stableCount = tracker.stableCount || 0;
+
+        if (lastEstimate > 0) {
+          const changePercent = Math.abs(remaining - lastEstimate) / lastEstimate;
+          if (changePercent <= 0.03) {
+            tracker.stableCount = stableCount + 1;
+          } else {
+            tracker.stableCount = 0;
+          }
+        }
+
+        tracker.lastEstimate = remaining;
+        chrome.storage.local.set({ usageTracker: tracker });
+
+        if (tracker.stableCount >= 3) {
+          el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
+        } else {
+          el("bs-msgs-remaining").textContent = "Calibrating...";
+        }
       } else {
         el("bs-msgs-remaining").textContent = "Calibrating...";
       }
