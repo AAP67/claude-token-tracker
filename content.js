@@ -65,7 +65,7 @@ function handleRateLimit(data) {
 
   chrome.storage.local.get(["rateLimit", "usageTracker"], (result) => {
     const prevUtil = result.rateLimit?.utilization5h || 0;
-    const tracker = result.usageTracker || { totalDelta: 0, messagesSent: 0 };
+    const tracker = result.usageTracker || { totalDelta: 0, messagesSent: 0, lastEstimate: 0, stableCount: 0, displayEstimate: null };
 
     const delta = currentUtil - prevUtil;
     if (delta < 0) {
@@ -73,10 +73,31 @@ function handleRateLimit(data) {
       tracker.messagesSent = 0;
       tracker.lastEstimate = 0;
       tracker.stableCount = 0;
+      tracker.displayEstimate = null;
     } else {
       tracker.messagesSent += 1;
       if (delta > 0) {
         tracker.totalDelta += delta;
+      }
+
+      if (tracker.messagesSent >= 5 && tracker.totalDelta > 0) {
+        const costPerMsg = tracker.totalDelta / tracker.messagesSent;
+        const remaining = Math.floor((1 - currentUtil) / costPerMsg);
+
+        if (tracker.lastEstimate > 0) {
+          const changePercent = Math.abs(remaining - tracker.lastEstimate) / tracker.lastEstimate;
+          if (changePercent <= 0.03) {
+            tracker.stableCount += 1;
+          } else {
+            tracker.stableCount = 0;
+          }
+        }
+
+        tracker.lastEstimate = remaining;
+
+        if (tracker.stableCount >= 3) {
+          tracker.displayEstimate = remaining;
+        }
       }
     }
 
@@ -268,31 +289,8 @@ function updateWidget() {
 
     // Estimated messages remaining
     if (el("bs-msgs-remaining")) {
-      const minMessages = 5;
-      if (tracker.messagesSent >= minMessages && tracker.totalDelta > 0) {
-        const costPerMsg = tracker.totalDelta / tracker.messagesSent;
-        const remaining = Math.floor((1 - (rl.utilization5h || 0)) / costPerMsg);
-
-        const lastEstimate = tracker.lastEstimate || 0;
-        const stableCount = tracker.stableCount || 0;
-
-        if (lastEstimate > 0) {
-          const changePercent = Math.abs(remaining - lastEstimate) / lastEstimate;
-          if (changePercent <= 0.03) {
-            tracker.stableCount = stableCount + 1;
-          } else {
-            tracker.stableCount = 0;
-          }
-        }
-
-        tracker.lastEstimate = remaining;
-        chrome.storage.local.set({ usageTracker: tracker });
-
-        if (tracker.stableCount >= 3) {
-          el("bs-msgs-remaining").textContent = "~" + remaining + " messages remaining";
-        } else {
-          el("bs-msgs-remaining").textContent = "Calibrating...";
-        }
+      if (tracker.displayEstimate) {
+        el("bs-msgs-remaining").textContent = "~" + tracker.displayEstimate + " messages remaining";
       } else {
         el("bs-msgs-remaining").textContent = "Calibrating...";
       }
