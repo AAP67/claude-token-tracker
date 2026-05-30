@@ -1,14 +1,19 @@
-// ── Listen for messages from interceptor ──
+// ── Process a message event ──
 
-window.addEventListener("message", (event) => {
-  if (event.data?.type !== "BATTERY_SAVER") return;
-
-  const { event: eventType, data } = event.data;
+function processMessage(msg) {
+  const { event: eventType, data } = msg;
 
   if (eventType === "prompt") handlePrompt(data);
   if (eventType === "response") handleResponse(data);
   if (eventType === "rate_limit") handleRateLimit(data);
   if (eventType === "history_load") handleHistoryLoad(data);
+}
+
+// ── Listen for messages from interceptor ──
+
+window.addEventListener("message", (event) => {
+  if (event.data?.type !== "BATTERY_SAVER") return;
+  processMessage(event.data);
 });
 
 // ── Token estimation ──
@@ -208,7 +213,6 @@ function updateWidget() {
     const pct7d = Math.round((rl.utilization7d || 0) * 100);
     const color5h = getColor(pct5h);
 
-    // Update toggle button color
     const toggle = document.getElementById("bs-toggle");
     if (toggle) {
       toggle.className = color5h;
@@ -219,7 +223,6 @@ function updateWidget() {
       iconStroke.forEach(el => el.setAttribute("stroke", colorHex));
     }
 
-    // 5-hour section
     const el = (id) => document.getElementById(id);
     if (el("bs-5h-pct")) el("bs-5h-pct").textContent = pct5h;
     if (el("bs-5h-bar")) {
@@ -228,7 +231,6 @@ function updateWidget() {
     }
     if (el("bs-5h-reset")) el("bs-5h-reset").textContent = formatResetTime(rl.resetsAt5h);
 
-    // 7-day section
     const color7d = getColor(pct7d);
     if (el("bs-7d-pct")) el("bs-7d-pct").textContent = pct7d;
     if (el("bs-7d-bar")) {
@@ -237,7 +239,6 @@ function updateWidget() {
     }
     if (el("bs-7d-reset")) el("bs-7d-reset").textContent = formatResetTime(rl.resetsAt7d);
 
-    // Session stats
     if (el("bs-msgs")) el("bs-msgs").textContent = session.messageCount || 0;
     if (el("bs-prompt-tok")) el("bs-prompt-tok").textContent = session.promptTokens || 0;
     if (el("bs-resp-tok")) el("bs-resp-tok").textContent = session.responseTokens || 0;
@@ -256,20 +257,15 @@ function getConvoIdFromUrl() {
 function init() {
   createWidget();
 
-  // Load existing session or match to current URL
-  const urlConvoId = getConvoIdFromUrl();
+  // Process any queued messages that arrived before content.js loaded
+  if (window.__batterySaverQueue && window.__batterySaverQueue.length > 0) {
+    console.log("[Battery Saver] Processing", window.__batterySaverQueue.length, "queued messages");
+    window.__batterySaverQueue.forEach(msg => processMessage(msg));
+    window.__batterySaverQueue = [];
+  }
 
-  chrome.storage.local.get(["session", "rateLimit"], (result) => {
-    const session = result.session;
-
-    if (session && urlConvoId && session.convoId !== urlConvoId) {
-      archiveSession(session);
-      const fresh = newSession(urlConvoId);
-      chrome.storage.local.set({ session: fresh }, () => updateWidget());
-    } else {
-      updateWidget();
-    }
-  });
+  // Load existing data from storage
+  updateWidget();
 
   // Refresh countdown every minute
   setInterval(updateWidget, 60000);

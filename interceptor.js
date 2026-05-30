@@ -1,13 +1,10 @@
 (function () {
   const originalFetch = window.fetch;
+  window.__batterySaverQueue = [];
 
   window.fetch = async function (...args) {
     const [url, options] = args;
     const method = options?.method?.toUpperCase() || "GET";
-
-    if (typeof url === "string" && url.includes("chat_conversations")) {
-      console.log("[Battery Saver] Fetch URL:", url, "Method:", method);
-    }
 
     // ── Intercept completion POST requests ──
     if (typeof url === "string" && url.includes("/completion") && method === "POST") {
@@ -20,7 +17,7 @@
         prompt = body.prompt || "";
       } catch (e) {}
 
-      window.postMessage({
+      const msg = {
         type: "BATTERY_SAVER",
         event: "prompt",
         data: {
@@ -29,7 +26,9 @@
           charCount: prompt.length,
           timestamp: Date.now()
         }
-      }, "*");
+      };
+      window.__batterySaverQueue.push(msg);
+      window.postMessage(msg, "*");
 
       const response = await originalFetch.apply(this, args);
       const clone = response.clone();
@@ -65,7 +64,7 @@
             }
           });
 
-          window.postMessage({
+          const msg = {
             type: "BATTERY_SAVER",
             event: "history_load",
             data: {
@@ -76,7 +75,9 @@
               thinkingChars: thinkingChars,
               timestamp: Date.now()
             }
-          }, "*");
+          };
+          window.__batterySaverQueue.push(msg);
+          window.postMessage(msg, "*");
         }
       }).catch(() => {});
 
@@ -116,15 +117,17 @@
           }
 
           if (data.type === "message_limit") {
-            window.postMessage({
+            const msg = {
               type: "BATTERY_SAVER",
               event: "rate_limit",
               data: data.message_limit
-            }, "*");
+            };
+            window.__batterySaverQueue.push(msg);
+            window.postMessage(msg, "*");
           }
 
           if (data.type === "message_stop") {
-            window.postMessage({
+            const msg = {
               type: "BATTERY_SAVER",
               event: "response",
               data: {
@@ -135,7 +138,9 @@
                 thinkingChars: thinkingText.length,
                 timestamp: Date.now()
               }
-            }, "*");
+            };
+            window.__batterySaverQueue.push(msg);
+            window.postMessage(msg, "*");
           }
         } catch (e) {}
       }
