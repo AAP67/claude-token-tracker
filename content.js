@@ -48,6 +48,8 @@ function handlePrompt(data) {
   saveMessage({
     convoId: data.convoId,
     role: "human",
+    text: data.text,
+    charCount: data.charCount,
     promptTokens: tokens,
     responseTokens: 0,
     thinkingTokens: 0,
@@ -335,7 +337,6 @@ function updateWidget() {
     const pct7d = Math.round((rl.utilization7d || 0) * 100);
     const color5h = getColor(pct5h);
 
-    // Update toggle button and battery icon
     const toggle = document.getElementById("bs-toggle");
     if (toggle) {
       toggle.className = color5h;
@@ -358,7 +359,6 @@ function updateWidget() {
 
     const el = (id) => document.getElementById(id);
 
-    // 5-hour section
     if (el("bs-5h-pct")) el("bs-5h-pct").textContent = pct5h;
     if (el("bs-5h-bar")) {
       el("bs-5h-bar").style.width = pct5h + "%";
@@ -366,7 +366,6 @@ function updateWidget() {
     }
     if (el("bs-5h-reset")) el("bs-5h-reset").textContent = formatResetTime(rl.resetsAt5h);
 
-    // Estimated messages remaining
     if (el("bs-msgs-remaining")) {
       if (tracker.displayEstimate) {
         el("bs-msgs-remaining").textContent = "~" + tracker.displayEstimate + " messages remaining";
@@ -383,7 +382,6 @@ function updateWidget() {
       }
     }
 
-    // 7-day section
     const color7d = getColor(pct7d);
     if (el("bs-7d-pct")) el("bs-7d-pct").textContent = pct7d;
     if (el("bs-7d-bar")) {
@@ -392,7 +390,6 @@ function updateWidget() {
     }
     if (el("bs-7d-reset")) el("bs-7d-reset").textContent = formatResetTime(rl.resetsAt7d);
 
-    // Session stats
     if (el("bs-msgs")) el("bs-msgs").textContent = session.messageCount || 0;
     if (el("bs-prompt-tok")) el("bs-prompt-tok").textContent = session.promptTokens || 0;
     if (el("bs-resp-tok")) el("bs-resp-tok").textContent = session.responseTokens || 0;
