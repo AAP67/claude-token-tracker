@@ -51,8 +51,14 @@
           let responseChars = 0;
           let thinkingChars = 0;
           let messageCount = 0;
+          let firstMessageTime = null;
+          let lastMessageTime = null;
 
           data.chat_messages.forEach(msg => {
+            const msgTime = new Date(msg.created_at).getTime();
+            if (!firstMessageTime) firstMessageTime = msgTime;
+            lastMessageTime = msgTime;
+
             if (msg.sender === "human") {
               messageCount += 1;
               msg.content.forEach(block => {
@@ -78,7 +84,9 @@
               promptChars: promptChars,
               responseChars: responseChars,
               thinkingChars: thinkingChars,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              firstMessageAt: firstMessageTime,
+              lastMessageAt: lastMessageTime
             }
           };
           window.__batterySaverQueue.push(msg);

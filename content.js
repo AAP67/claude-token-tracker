@@ -168,8 +168,8 @@ function handleHistoryLoad(data) {
     responseTokens: responseTokens,
     thinkingTokens: thinkingTokens,
     totalTokens: promptTokens + responseTokens + thinkingTokens,
-    startedAt: data.timestamp,
-    lastActivity: data.timestamp
+    startedAt: data.firstMessageAt || data.timestamp,
+    lastActivity: data.lastMessageAt || data.timestamp
   };
 
   chrome.storage.local.set({ session }, () => updateWidget());
@@ -184,8 +184,8 @@ function handleHistoryLoad(data) {
     responseTokens: responseTokens,
     thinkingTokens: thinkingTokens,
     totalTokens: promptTokens + responseTokens + thinkingTokens,
-    firstMessageAt: data.timestamp,
-    lastMessageAt: data.timestamp,
+    firstMessageAt: data.firstMessageAt || data.timestamp,
+    lastMessageAt: data.lastMessageAt || data.timestamp,
     utilization5h: 0
   }).catch(() => {});
 
