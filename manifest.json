@@ -13,7 +13,7 @@
     },
     {
       "matches": ["https://claude.ai/*"],
-      "js": ["content.js"],
+      "js": ["db.js", "content.js"],
       "css": ["widget.css"],
       "run_at": "document_idle"
     }

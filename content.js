@@ -39,16 +39,28 @@ function handlePrompt(data) {
     session.promptTokens += tokens;
     session.totalTokens += tokens;
     session.lastActivity = data.timestamp;
+    if (data.model) session.model = data.model;
 
     chrome.storage.local.set({ session }, () => updateWidget());
   });
+
+  // Log to IndexedDB
+  saveMessage({
+    convoId: data.convoId,
+    role: "human",
+    promptTokens: tokens,
+    responseTokens: 0,
+    thinkingTokens: 0,
+    model: data.model || "",
+    timestamp: data.timestamp
+  }).catch(() => {});
 }
 
 function handleResponse(data) {
   const responseTokens = estimateTokens(data.responseChars);
   const thinkingTokens = estimateTokens(data.thinkingChars);
 
-  chrome.storage.local.get(["session"], (result) => {
+  chrome.storage.local.get(["session", "rateLimit"], (result) => {
     const session = result.session || newSession(data.convoId);
 
     session.responseTokens += responseTokens;
@@ -56,8 +68,36 @@ function handleResponse(data) {
     session.totalTokens += responseTokens + thinkingTokens;
     session.lastActivity = data.timestamp;
 
-    chrome.storage.local.set({ session }, () => updateWidget());
+    chrome.storage.local.set({ session }, () => {
+      updateWidget();
+
+      // Update conversation in IndexedDB
+      saveConversation({
+        convoId: session.convoId,
+        name: session.name || "",
+        model: session.model || "",
+        messageCount: session.messageCount,
+        promptTokens: session.promptTokens,
+        responseTokens: session.responseTokens,
+        thinkingTokens: session.thinkingTokens,
+        totalTokens: session.totalTokens,
+        firstMessageAt: session.startedAt,
+        lastMessageAt: session.lastActivity,
+        utilization5h: result.rateLimit?.utilization5h || 0
+      }).catch(() => {});
+    });
   });
+
+  // Log to IndexedDB
+  saveMessage({
+    convoId: data.convoId,
+    role: "assistant",
+    promptTokens: 0,
+    responseTokens: responseTokens,
+    thinkingTokens: thinkingTokens,
+    model: "",
+    timestamp: data.timestamp
+  }).catch(() => {});
 }
 
 function handleRateLimit(data) {
@@ -121,6 +161,8 @@ function handleHistoryLoad(data) {
 
   const session = {
     convoId: data.convoId,
+    name: data.name || "",
+    model: data.model || "",
     messageCount: data.messageCount,
     promptTokens: promptTokens,
     responseTokens: responseTokens,
@@ -131,12 +173,30 @@ function handleHistoryLoad(data) {
   };
 
   chrome.storage.local.set({ session }, () => updateWidget());
+
+  // Save conversation to IndexedDB
+  saveConversation({
+    convoId: data.convoId,
+    name: data.name || "",
+    model: data.model || "",
+    messageCount: data.messageCount,
+    promptTokens: promptTokens,
+    responseTokens: responseTokens,
+    thinkingTokens: thinkingTokens,
+    totalTokens: promptTokens + responseTokens + thinkingTokens,
+    firstMessageAt: data.timestamp,
+    lastMessageAt: data.timestamp,
+    utilization5h: 0
+  }).catch(() => {});
+
   console.log("[Battery Saver] Loaded history:", session.totalTokens, "tokens from", data.messageCount, "messages");
 }
 
 function newSession(convoId) {
   return {
     convoId: convoId,
+    name: "",
+    model: "",
     messageCount: 0,
     promptTokens: 0,
     responseTokens: 0,
@@ -215,6 +275,10 @@ function createWidget() {
           <span class="bs-stat-value" id="bs-total-tok">0</span>
         </div>
       </div>
+
+      <div class="bs-section" style="text-align:center">
+        <button id="bs-export" style="background:none;border:1px solid #333;color:#888;font-size:11px;padding:4px 12px;border-radius:4px;cursor:pointer;">Export Data</button>
+      </div>
     </div>
   `;
 
@@ -226,6 +290,21 @@ function createWidget() {
 
   document.getElementById("bs-close").addEventListener("click", () => {
     document.getElementById("bs-panel").classList.remove("open");
+  });
+
+  document.getElementById("bs-export").addEventListener("click", async () => {
+    try {
+      const data = await exportAll();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "battery-saver-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("[Battery Saver] Export failed:", e);
+    }
   });
 }
 

@@ -12,9 +12,11 @@
       const convoId = convoMatch ? convoMatch[1] : "unknown";
 
       let prompt = "";
+      let model = "";
       try {
         const body = JSON.parse(options.body);
         prompt = body.prompt || "";
+        model = body.model || "";
       } catch (e) {}
 
       const msg = {
@@ -24,6 +26,7 @@
           convoId: convoId,
           text: prompt,
           charCount: prompt.length,
+          model: model,
           timestamp: Date.now()
         }
       };
@@ -69,6 +72,8 @@
             event: "history_load",
             data: {
               convoId: convoId,
+              name: data.name || "",
+              model: data.model || "",
               messageCount: messageCount,
               promptChars: promptChars,
               responseChars: responseChars,
